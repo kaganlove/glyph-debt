@@ -31,6 +31,29 @@ type Contract =
       text: string;
     };
 
+type PlayerUpgrades = {
+  rewardBonus: number;
+  handSize: number;
+  curseRewardBonus: number;
+  failureProtection: number;
+  contractEase: number;
+};
+
+type Upgrade = {
+  id: string;
+  title: string;
+  description: string;
+  apply: (current: PlayerUpgrades) => PlayerUpgrades;
+};
+
+const startingUpgrades: PlayerUpgrades = {
+  rewardBonus: 0,
+  handSize: 5,
+  curseRewardBonus: 0,
+  failureProtection: 0,
+  contractEase: 0,
+};
+
 const glyphPool: Omit<Glyph, "id">[] = [
   {
     label: "+1",
@@ -82,6 +105,54 @@ const glyphPool: Omit<Glyph, "id">[] = [
   },
 ];
 
+const upgradePool: Upgrade[] = [
+  {
+    id: "larger-hand",
+    title: "Longer Fingers",
+    description: "Draw 1 extra glyph each contract.",
+    apply: (current) => ({
+      ...current,
+      handSize: current.handSize + 1,
+    }),
+  },
+  {
+    id: "gold-bonus",
+    title: "Greedy Ink",
+    description: "Earn 3 extra gold from every fulfilled contract.",
+    apply: (current) => ({
+      ...current,
+      rewardBonus: current.rewardBonus + 3,
+    }),
+  },
+  {
+    id: "curse-payout",
+    title: "Profitable Corruption",
+    description: "Each curse is worth 2 more gold when a contract succeeds.",
+    apply: (current) => ({
+      ...current,
+      curseRewardBonus: current.curseRewardBonus + 2,
+    }),
+  },
+  {
+    id: "failure-shield",
+    title: "Cracked Ward",
+    description: "Failed rituals add 1 less debt.",
+    apply: (current) => ({
+      ...current,
+      failureProtection: current.failureProtection + 1,
+    }),
+  },
+  {
+    id: "easier-contracts",
+    title: "Forged Fine Print",
+    description: "Future contracts become slightly easier.",
+    apply: (current) => ({
+      ...current,
+      contractEase: current.contractEase + 2,
+    }),
+  },
+];
+
 function createGlyph(): Glyph {
   const base = glyphPool[Math.floor(Math.random() * glyphPool.length)];
 
@@ -95,11 +166,47 @@ function createHand(size = 5): Glyph[] {
   return Array.from({ length: size }, createGlyph);
 }
 
-function createContract(): Contract {
+function createRound(handSize = 5, ease = 0) {
+  const hand = createHand(handSize);
+  const possiblePowers = getPossiblePowers(hand);
+  const contract = createContractFromPossiblePowers(possiblePowers, ease);
+
+  return { hand, contract };
+}
+
+function getPossiblePowers(hand: Glyph[]) {
+  const results = new Set<number>();
+
+  function explore(remaining: Glyph[], sequence: Glyph[]) {
+    if (sequence.length > 0) {
+      const { power } = calculatePower(sequence);
+      results.add(power);
+    }
+
+    for (let i = 0; i < remaining.length; i++) {
+      const nextGlyph = remaining[i];
+      const nextRemaining = remaining.filter((_, index) => index !== i);
+      explore(nextRemaining, [...sequence, nextGlyph]);
+    }
+  }
+
+  explore(hand, []);
+
+  return Array.from(results)
+    .filter((value) => value > 0)
+    .sort((a, b) => a - b);
+}
+
+function createContractFromPossiblePowers(
+  possiblePowers: number[],
+  ease = 0
+): Contract {
+  const safePowers = possiblePowers.length > 0 ? possiblePowers : [5];
+  const powerOptions = safePowers.filter((power) => power >= 1);
   const roll = Math.random();
 
   if (roll < 0.4) {
-    const target = randomInt(8, 24);
+    const target = pickRandom(powerOptions);
 
     return {
       type: "exact",
@@ -109,7 +216,10 @@ function createContract(): Contract {
   }
 
   if (roll < 0.75) {
-    const target = randomInt(12, 30);
+    const maxPower = Math.max(...powerOptions);
+    const adjustedMax = Math.max(4, maxPower - ease);
+    const lowTarget = Math.max(1, Math.floor(adjustedMax * 0.55));
+    const target = randomInt(lowTarget, adjustedMax);
 
     return {
       type: "minimum",
@@ -118,8 +228,10 @@ function createContract(): Contract {
     };
   }
 
-  const min = randomInt(8, 20);
-  const max = min + randomInt(5, 10);
+  const target = pickRandom(powerOptions);
+  const spread = randomInt(2, 5) + ease;
+  const min = Math.max(1, target - spread);
+  const max = target + spread;
 
   return {
     type: "range",
@@ -127,6 +239,15 @@ function createContract(): Contract {
     max,
     text: `Create between ${min} and ${max} power.`,
   };
+}
+
+function createUpgradeChoices(): Upgrade[] {
+  const shuffled = [...upgradePool].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, 3);
+}
+
+function pickRandom<T>(items: T[]) {
+  return items[Math.floor(Math.random() * items.length)];
 }
 
 function randomInt(min: number, max: number) {
@@ -175,13 +296,19 @@ function App() {
   const [day, setDay] = useState(1);
   const [gold, setGold] = useState(0);
   const [debt, setDebt] = useState(30);
-  const [contract, setContract] = useState<Contract>(() => createContract());
-  const [hand, setHand] = useState<Glyph[]>(() => createHand());
+  const [upgrades, setUpgrades] = useState<PlayerUpgrades>(startingUpgrades);
+
+  const [startingRound] = useState(() => createRound(startingUpgrades.handSize));
+
+  const [contract, setContract] = useState<Contract>(startingRound.contract);
+  const [hand, setHand] = useState<Glyph[]>(startingRound.hand);
   const [board, setBoard] = useState<BoardCell[]>(() => Array(16).fill(null));
   const [selectedGlyphId, setSelectedGlyphId] = useState<string | null>(null);
   const [message, setMessage] = useState("Choose a glyph, place it, then cast.");
   const [isRunOver, setIsRunOver] = useState(false);
   const [hasCast, setHasCast] = useState(false);
+  const [showUpgradeChoices, setShowUpgradeChoices] = useState(false);
+  const [upgradeChoices, setUpgradeChoices] = useState<Upgrade[]>([]);
 
   const placedGlyphs = useMemo(() => {
     return board.filter((cell): cell is Glyph => cell !== null);
@@ -192,6 +319,25 @@ function App() {
   }, [placedGlyphs]);
 
   const selectedGlyph = hand.find((glyph) => glyph.id === selectedGlyphId);
+
+  function startNewContract(
+    nextDay: number,
+    currentUpgrades: PlayerUpgrades,
+    nextMessage: string
+  ) {
+    const nextRound = createRound(
+      currentUpgrades.handSize,
+      currentUpgrades.contractEase
+    );
+
+    setDay(nextDay);
+    setContract(nextRound.contract);
+    setHand(nextRound.hand);
+    setBoard(Array(16).fill(null));
+    setSelectedGlyphId(null);
+    setHasCast(false);
+    setMessage(nextMessage);
+  }
 
   function placeGlyph(cellIndex: number) {
     if (hasCast) {
@@ -205,7 +351,9 @@ function App() {
     nextBoard[cellIndex] = selectedGlyph;
 
     setBoard(nextBoard);
-    setHand((current) => current.filter((glyph) => glyph.id !== selectedGlyph.id));
+    setHand((current) =>
+      current.filter((glyph) => glyph.id !== selectedGlyph.id)
+    );
     setSelectedGlyphId(null);
     setMessage(`${selectedGlyph.label} placed on the ritual board.`);
   }
@@ -225,14 +373,27 @@ function App() {
     setHasCast(true);
 
     if (success) {
-      const reward = Math.max(5, 10 + curse * 2);
+      const reward = Math.max(
+        5,
+        10 + upgrades.rewardBonus + curse * (2 + upgrades.curseRewardBonus)
+      );
+
       setGold((current) => current + reward);
       setMessage(`Contract fulfilled. You earned ${reward} gold.`);
       return;
     }
 
-    setDebt((current) => current + 3);
-    setMessage(`The ritual failed. Your spell created ${power} power. Debt increased by 3.`);
+    const debtPenalty = Math.max(0, 3 - upgrades.failureProtection);
+    setDebt((current) => current + debtPenalty);
+
+    if (debtPenalty === 0) {
+      setMessage("The ritual failed. Your ward absorbed the debt penalty.");
+      return;
+    }
+
+    setMessage(
+      `The ritual failed. Your spell created ${power} power. Debt increased by ${debtPenalty}.`
+    );
   }
 
   function nextContract() {
@@ -241,44 +402,55 @@ function App() {
       return;
     }
 
-    const nextDay = day + 1;
-
-    if (nextDay % 3 === 1) {
-      const debtAfterPayment = debt - gold;
-
-      if (debtAfterPayment > 0) {
+    if (day % 3 === 0) {
+      if (gold < debt) {
         setIsRunOver(true);
         return;
       }
 
-      const newDebt = 30 + nextDay * 3;
+      const remainingGold = gold - debt;
+      const newDebt = 30 + day * 4;
 
+      setGold(remainingGold);
       setDebt(newDebt);
-      setGold(0);
-      setMessage(`Debt paid. A new debt of ${newDebt} gold has been written in blood.`);
-    } else {
-      setMessage("A new contract slides across the counter.");
+      setUpgradeChoices(createUpgradeChoices());
+      setShowUpgradeChoices(true);
+      setMessage("Debt paid. Choose a forbidden upgrade.");
+      return;
     }
 
-    setDay(nextDay);
-    setContract(createContract());
-    setHand(createHand());
-    setBoard(Array(16).fill(null));
-    setSelectedGlyphId(null);
-    setHasCast(false);
+    startNewContract(day + 1, upgrades, "A new contract slides across the counter.");
+  }
+
+  function chooseUpgrade(upgrade: Upgrade) {
+    const nextUpgrades = upgrade.apply(upgrades);
+
+    setUpgrades(nextUpgrades);
+    setShowUpgradeChoices(false);
+    startNewContract(
+      day + 1,
+      nextUpgrades,
+      `${upgrade.title} added. The next contract waits.`
+    );
   }
 
   function restartRun() {
+    const resetUpgrades = { ...startingUpgrades };
+    const nextRound = createRound(resetUpgrades.handSize);
+
     setDay(1);
     setGold(0);
     setDebt(30);
-    setContract(createContract());
-    setHand(createHand());
+    setUpgrades(resetUpgrades);
+    setContract(nextRound.contract);
+    setHand(nextRound.hand);
     setBoard(Array(16).fill(null));
     setSelectedGlyphId(null);
     setMessage("Choose a glyph, place it, then cast.");
     setIsRunOver(false);
     setHasCast(false);
+    setShowUpgradeChoices(false);
+    setUpgradeChoices([]);
   }
 
   if (isRunOver) {
@@ -346,7 +518,9 @@ function App() {
               }`}
               onClick={() => {
                 if (hasCast) {
-                  setMessage("The spell has already been cast. Move to the next contract.");
+                  setMessage(
+                    "The spell has already been cast. Move to the next contract."
+                  );
                   return;
                 }
 
@@ -369,18 +543,39 @@ function App() {
           <button
             className="primary-button"
             onClick={castSpell}
-            disabled={hasCast}
+            disabled={hasCast || showUpgradeChoices}
           >
             Cast Spell
           </button>
           <button
             className="secondary-button"
             onClick={nextContract}
-            disabled={!hasCast}
+            disabled={!hasCast || showUpgradeChoices}
           >
             Next
           </button>
         </div>
+
+        {showUpgradeChoices && (
+          <section className="upgrade-overlay">
+            <div className="upgrade-panel">
+              <p className="eyebrow">Debt Paid</p>
+              <h2>Choose a forbidden upgrade</h2>
+              <div className="upgrade-list">
+                {upgradeChoices.map((upgrade) => (
+                  <button
+                    key={upgrade.id}
+                    className="upgrade-card"
+                    onClick={() => chooseUpgrade(upgrade)}
+                  >
+                    <strong>{upgrade.title}</strong>
+                    <span>{upgrade.description}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
       </section>
     </main>
   );
