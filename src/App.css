@@ -109,6 +109,13 @@ button:not(:disabled) {
   color: #dfceb2;
 }
 
+.preview-line {
+  margin-top: 8px !important;
+  color: #f2cb78 !important;
+  font-size: 0.82rem;
+  line-height: 1.25;
+}
+
 .compact-cycle-card {
   border: 1px solid rgba(246, 234, 210, 0.12);
   border-radius: 16px;
@@ -177,6 +184,15 @@ button:not(:disabled) {
   background:
     radial-gradient(circle at top, rgba(202, 168, 120, 0.28), transparent 70%),
     rgba(83, 48, 31, 0.55);
+}
+
+.board-cell.previewed {
+  border-color: rgba(242, 203, 120, 0.92);
+  background:
+    radial-gradient(circle at top, rgba(242, 203, 120, 0.32), transparent 70%),
+    rgba(105, 76, 38, 0.38);
+  color: #f2cb78;
+  box-shadow: inset 0 0 0 2px rgba(242, 203, 120, 0.14);
 }
 
 .hand {

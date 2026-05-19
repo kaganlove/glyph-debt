@@ -18,6 +18,7 @@ type Glyph = {
   type: GlyphType;
   value: number;
   description: string;
+  isSpecial?: boolean;
 };
 
 type BoardCell = Glyph | null;
@@ -123,6 +124,7 @@ const glyphPool: Omit<Glyph, "id">[] = [
     type: "edgeDouble",
     value: 2,
     description: "Double the spell if placed on an outer edge.",
+    isSpecial: true,
   },
   {
     label: "Corner +7",
@@ -130,6 +132,7 @@ const glyphPool: Omit<Glyph, "id">[] = [
     type: "cornerAdd",
     value: 7,
     description: "Add 7 power in a corner. Otherwise add 2.",
+    isSpecial: true,
   },
   {
     label: "Center +6",
@@ -137,6 +140,7 @@ const glyphPool: Omit<Glyph, "id">[] = [
     type: "centerAdd",
     value: 6,
     description: "Add 6 power in the center. Otherwise add 1.",
+    isSpecial: true,
   },
   {
     label: "Copy Left",
@@ -144,6 +148,7 @@ const glyphPool: Omit<Glyph, "id">[] = [
     type: "copyLeft",
     value: 0,
     description: "Copy the base power of the glyph directly to the left.",
+    isSpecial: true,
   },
   {
     label: "Neighbor +2",
@@ -151,6 +156,7 @@ const glyphPool: Omit<Glyph, "id">[] = [
     type: "neighborAdd",
     value: 2,
     description: "Add 2 power for each adjacent glyph.",
+    isSpecial: true,
   },
 ];
 
@@ -202,17 +208,35 @@ const upgradePool: Upgrade[] = [
   },
 ];
 
-function createGlyph(): Glyph {
-  const base = glyphPool[Math.floor(Math.random() * glyphPool.length)];
-
+function createGlyphFromBase(base: Omit<Glyph, "id">): Glyph {
   return {
     ...base,
     id: crypto.randomUUID(),
   };
 }
 
+function createRandomGlyph(): Glyph {
+  const base = glyphPool[Math.floor(Math.random() * glyphPool.length)];
+  return createGlyphFromBase(base);
+}
+
 function createHand(size = 5): Glyph[] {
-  return Array.from({ length: size }, createGlyph);
+  const basics = glyphPool.filter((glyph) => !glyph.isSpecial);
+  const specials = shuffleArray(glyphPool.filter((glyph) => glyph.isSpecial));
+  const hand: Glyph[] = [];
+
+  const specialCount = Math.min(randomInt(1, 2), size, specials.length);
+
+  for (let i = 0; i < specialCount; i++) {
+    hand.push(createGlyphFromBase(specials[i]));
+  }
+
+  while (hand.length < size) {
+    const base = basics[Math.floor(Math.random() * basics.length)];
+    hand.push(createGlyphFromBase(base));
+  }
+
+  return shuffleArray(hand);
 }
 
 function createRound(handSize = 5, ease = 0) {
@@ -372,6 +396,30 @@ function checkContract(contract: Contract, power: number) {
   return power >= contract.min && power <= contract.max;
 }
 
+function getContractPreviewText(contract: Contract, power: number) {
+  if (checkContract(contract, power)) {
+    return "This would fulfill the contract.";
+  }
+
+  if (contract.type === "exact") {
+    if (power < contract.target) {
+      return `Still short by ${contract.target - power} power.`;
+    }
+
+    return `Too high by ${power - contract.target} power.`;
+  }
+
+  if (contract.type === "minimum") {
+    return `Still short by ${contract.target - power} power.`;
+  }
+
+  if (power < contract.min) {
+    return `Still short by ${contract.min - power} power.`;
+  }
+
+  return `Too high by ${power - contract.max} power.`;
+}
+
 function calculateNextDebt(day: number) {
   const cycle = Math.floor(day / 3);
   return 24 + cycle * 8;
@@ -468,6 +516,7 @@ function App() {
   );
   const [selectedGlyphId, setSelectedGlyphId] = useState<string | null>(null);
   const [draggedGlyphId, setDraggedGlyphId] = useState<string | null>(null);
+  const [previewCellIndex, setPreviewCellIndex] = useState<number | null>(null);
   const [message, setMessage] = useState(
     "Choose a glyph, place it, then cast."
   );
@@ -476,9 +525,26 @@ function App() {
   const [showUpgradeChoices, setShowUpgradeChoices] = useState(false);
   const [upgradeChoices, setUpgradeChoices] = useState<Upgrade[]>([]);
 
+  const selectedGlyph = hand.find((glyph) => glyph.id === selectedGlyphId);
+
+  const previewBoard = useMemo(() => {
+    if (!selectedGlyph || previewCellIndex === null || board[previewCellIndex]) {
+      return null;
+    }
+
+    const nextBoard = [...board];
+    nextBoard[previewCellIndex] = selectedGlyph;
+    return nextBoard;
+  }, [board, previewCellIndex, selectedGlyph]);
+
   const { power, curse, multiplier } = useMemo(() => {
     return calculateSpell(board);
   }, [board]);
+
+  const previewResult = useMemo(() => {
+    if (!previewBoard) return null;
+    return calculateSpell(previewBoard);
+  }, [previewBoard]);
 
   const projectedReward = useMemo(() => {
     return calculateProjectedReward(curse, upgrades);
@@ -492,15 +558,16 @@ function App() {
     debt - projectedGoldAfterSuccess
   );
 
-  const debtStatus =
-    shortfall === 0 ? "Safe" : `Short by ${shortfall}`;
+  const debtStatus = shortfall === 0 ? "Safe" : `Short by ${shortfall}`;
 
   const projectedDebtStatus =
     projectedShortfallAfterSuccess === 0
       ? "Success makes you safe."
       : `After success, still short by ${projectedShortfallAfterSuccess}.`;
 
-  const selectedGlyph = hand.find((glyph) => glyph.id === selectedGlyphId);
+  const previewText = previewResult
+    ? getContractPreviewText(contract, previewResult.power)
+    : "";
 
   function startNewContract(
     nextDay: number,
@@ -518,6 +585,7 @@ function App() {
     setBoard(Array(BOARD_SIZE).fill(null));
     setSelectedGlyphId(null);
     setDraggedGlyphId(null);
+    setPreviewCellIndex(null);
     setHasCast(false);
     setMessage(nextMessage);
   }
@@ -542,7 +610,31 @@ function App() {
     );
     setSelectedGlyphId(null);
     setDraggedGlyphId(null);
+    setPreviewCellIndex(null);
     setPlacementMessage(glyphToPlace, cellIndex);
+  }
+
+  function previewOrPlaceGlyph(cellIndex: number) {
+    if (!selectedGlyph || board[cellIndex]) {
+      placeGlyph(cellIndex);
+      return;
+    }
+
+    if (previewCellIndex !== cellIndex) {
+      const nextBoard = [...board];
+      nextBoard[cellIndex] = selectedGlyph;
+      const preview = calculateSpell(nextBoard);
+      setPreviewCellIndex(cellIndex);
+      setMessage(
+        `Preview: placing ${selectedGlyph.label} here creates ${preview.power} power. ${getContractPreviewText(
+          contract,
+          preview.power
+        )}`
+      );
+      return;
+    }
+
+    placeGlyph(cellIndex);
   }
 
   function removeGlyphFromBoard(cellIndex: number) {
@@ -562,6 +654,7 @@ function App() {
     setHand((current) => [...current, glyph]);
     setSelectedGlyphId(null);
     setDraggedGlyphId(null);
+    setPreviewCellIndex(null);
     setMessage(`${glyph.label} returned to your hand.`);
   }
 
@@ -582,6 +675,7 @@ function App() {
     setBoard(Array(BOARD_SIZE).fill(null));
     setSelectedGlyphId(null);
     setDraggedGlyphId(null);
+    setPreviewCellIndex(null);
     setMessage("The ritual board has been cleared.");
   }
 
@@ -731,6 +825,7 @@ function App() {
     setBoard(Array(BOARD_SIZE).fill(null));
     setSelectedGlyphId(null);
     setDraggedGlyphId(null);
+    setPreviewCellIndex(null);
     setMessage("Choose a glyph, place it, then cast.");
     setIsRunOver(false);
     setHasCast(false);
@@ -781,6 +876,12 @@ function App() {
             {curse > 0 ? `, ${curse} curse` : ""}
             {multiplier > 1 ? `, x${multiplier} multiplier` : ""}
           </p>
+          {previewResult && (
+            <p className="preview-line">
+              Preview: <strong>{previewResult.power}</strong> power.{" "}
+              {previewText}
+            </p>
+          )}
         </section>
 
         <section className="cycle-card compact-cycle-card">
@@ -810,14 +911,24 @@ function App() {
           {board.map((cell, index) => (
             <button
               key={index}
-              className={`board-cell ${cell ? "filled" : ""}`}
+              className={`board-cell ${cell ? "filled" : ""} ${
+                previewCellIndex === index ? "previewed" : ""
+              }`}
               onClick={() => {
                 if (cell) {
                   removeGlyphFromBoard(index);
                   return;
                 }
 
-                placeGlyph(index);
+                previewOrPlaceGlyph(index);
+              }}
+              onMouseEnter={() => {
+                if (!selectedGlyph || board[index] || hasCast) return;
+                setPreviewCellIndex(index);
+              }}
+              onMouseLeave={() => {
+                if (!selectedGlyph || hasCast) return;
+                setPreviewCellIndex(null);
               }}
               onDragOver={(event) => {
                 event.preventDefault();
@@ -832,7 +943,11 @@ function App() {
                 }
               }}
             >
-              {cell ? cell.shortLabel : ""}
+              {cell
+                ? cell.shortLabel
+                : previewCellIndex === index && selectedGlyph
+                  ? selectedGlyph.shortLabel
+                  : ""}
             </button>
           ))}
         </section>
@@ -864,7 +979,10 @@ function App() {
                 }
 
                 setSelectedGlyphId(glyph.id);
-                setMessage(glyph.description);
+                setPreviewCellIndex(null);
+                setMessage(
+                  `${glyph.description} Tap an empty cell once to preview, then tap it again to place.`
+                );
               }}
             >
               <strong>{glyph.label}</strong>
