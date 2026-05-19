@@ -64,6 +64,7 @@ type SpellResult = {
 const BOARD_SIZE = 16;
 const BOARD_WIDTH = 4;
 const STARTING_DEBT = 24;
+const BASE_REWARD = 12;
 
 const startingUpgrades: PlayerUpgrades = {
   rewardBonus: 0,
@@ -376,6 +377,25 @@ function calculateNextDebt(day: number) {
   return 24 + cycle * 8;
 }
 
+function getContractsUntilDebtDue(day: number) {
+  return 3 - ((day - 1) % 3);
+}
+
+function isDebtDueAfterThisContract(day: number) {
+  return day % 3 === 0;
+}
+
+function calculateProjectedReward(curse: number, upgrades: PlayerUpgrades) {
+  const curseBonus = curse * (2 + upgrades.curseRewardBonus);
+
+  return {
+    baseReward: BASE_REWARD,
+    upgradeBonus: upgrades.rewardBonus,
+    curseBonus,
+    totalReward: Math.max(5, BASE_REWARD + upgrades.rewardBonus + curseBonus),
+  };
+}
+
 function isEdge(index: number) {
   const row = Math.floor(index / BOARD_WIDTH);
   const column = index % BOARD_WIDTH;
@@ -459,6 +479,27 @@ function App() {
   const { power, curse, multiplier } = useMemo(() => {
     return calculateSpell(board);
   }, [board]);
+
+  const projectedReward = useMemo(() => {
+    return calculateProjectedReward(curse, upgrades);
+  }, [curse, upgrades]);
+
+  const contractsUntilDebtDue = getContractsUntilDebtDue(day);
+  const shortfall = Math.max(0, debt - gold);
+  const projectedGoldAfterSuccess = gold + projectedReward.totalReward;
+  const projectedShortfallAfterSuccess = Math.max(
+    0,
+    debt - projectedGoldAfterSuccess
+  );
+  const debtStatus =
+    shortfall === 0
+      ? "Safe for the next payment."
+      : `Short by ${shortfall} gold.`;
+
+  const projectedDebtStatus =
+    projectedShortfallAfterSuccess === 0
+      ? "A successful contract would make you safe."
+      : `Even after success, you would still need ${projectedShortfallAfterSuccess} gold.`;
 
   const selectedGlyph = hand.find((glyph) => glyph.id === selectedGlyphId);
 
@@ -612,16 +653,11 @@ function App() {
     setHasCast(true);
 
     if (success) {
-      const baseReward = 12;
-      const curseBonus = curse * (2 + upgrades.curseRewardBonus);
-      const reward = Math.max(
-        5,
-        baseReward + upgrades.rewardBonus + curseBonus
-      );
+      const reward = projectedReward.totalReward;
 
       setGold((current) => current + reward);
       setMessage(
-        `Contract fulfilled. Gold: ${baseReward} base + ${upgrades.rewardBonus} upgrade + ${curseBonus} curse = ${reward}.`
+        `Contract fulfilled. Gold: ${projectedReward.baseReward} base + ${projectedReward.upgradeBonus} upgrade + ${projectedReward.curseBonus} curse = ${reward}.`
       );
       return;
     }
@@ -645,7 +681,7 @@ function App() {
       return;
     }
 
-    if (day % 3 === 0) {
+    if (isDebtDueAfterThisContract(day)) {
       if (gold < debt) {
         setIsRunOver(true);
         return;
@@ -658,7 +694,9 @@ function App() {
       setDebt(newDebt);
       setUpgradeChoices(createUpgradeChoices());
       setShowUpgradeChoices(true);
-      setMessage("Debt paid. Choose a forbidden upgrade.");
+      setMessage(
+        `Debt paid. ${remainingGold} gold remains. New debt: ${newDebt}. Choose a forbidden upgrade.`
+      );
       return;
     }
 
@@ -744,6 +782,34 @@ function App() {
             {curse > 0 ? `, ${curse} curse` : ""}
             {multiplier > 1 ? `, x${multiplier} multiplier` : ""}
           </p>
+        </section>
+
+        <section className="cycle-card">
+          <div>
+            <span className="stat-label">Debt Cycle</span>
+            <strong>
+              {contractsUntilDebtDue === 1
+                ? "Due after this contract"
+                : `Due in ${contractsUntilDebtDue} contracts`}
+            </strong>
+          </div>
+
+          <div>
+            <span className="stat-label">Payment Status</span>
+            <strong>{debtStatus}</strong>
+          </div>
+
+          <div>
+            <span className="stat-label">If This Contract Succeeds</span>
+            <strong>{projectedDebtStatus}</strong>
+          </div>
+
+          <div className="reward-preview">
+            Reward if successful: {projectedReward.baseReward} base +{" "}
+            {projectedReward.upgradeBonus} upgrade +{" "}
+            {projectedReward.curseBonus} curse ={" "}
+            <strong>{projectedReward.totalReward}</strong> gold
+          </div>
         </section>
 
         <section className="board">
