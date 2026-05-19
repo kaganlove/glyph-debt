@@ -214,3 +214,25 @@ button:disabled {
 button:not(:disabled) {
   cursor: pointer;
 }
+
+.utility-row {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+.board-cell {
+  font-size: 1rem;
+  line-height: 1.05;
+  overflow: hidden;
+  word-break: normal;
+  white-space: normal;
+}
+
+.glyph-card {
+  touch-action: manipulation;
+}
+
+.board-cell.filled {
+  font-size: 1.05rem;
+}

@@ -1,11 +1,20 @@
 import { useMemo, useState } from "react";
 import "./App.css";
 
-type GlyphType = "add" | "multiply" | "subtract" | "curse";
+type GlyphType =
+  | "add"
+  | "subtract"
+  | "curse"
+  | "edgeDouble"
+  | "cornerAdd"
+  | "centerAdd"
+  | "copyLeft"
+  | "neighborAdd";
 
 type Glyph = {
   id: string;
   label: string;
+  shortLabel: string;
   type: GlyphType;
   value: number;
   description: string;
@@ -46,6 +55,16 @@ type Upgrade = {
   apply: (current: PlayerUpgrades) => PlayerUpgrades;
 };
 
+type SpellResult = {
+  power: number;
+  curse: number;
+  multiplier: number;
+};
+
+const BOARD_SIZE = 16;
+const BOARD_WIDTH = 4;
+const STARTING_DEBT = 24;
+
 const startingUpgrades: PlayerUpgrades = {
   rewardBonus: 0,
   handSize: 5,
@@ -57,51 +76,80 @@ const startingUpgrades: PlayerUpgrades = {
 const glyphPool: Omit<Glyph, "id">[] = [
   {
     label: "+1",
+    shortLabel: "+1",
     type: "add",
     value: 1,
     description: "Add 1 power.",
   },
   {
     label: "+2",
+    shortLabel: "+2",
     type: "add",
     value: 2,
     description: "Add 2 power.",
   },
   {
     label: "+3",
+    shortLabel: "+3",
     type: "add",
     value: 3,
     description: "Add 3 power.",
   },
   {
     label: "+5",
+    shortLabel: "+5",
     type: "add",
     value: 5,
     description: "Add 5 power.",
   },
   {
-    label: "x2",
-    type: "multiply",
-    value: 2,
-    description: "Double the current power.",
-  },
-  {
-    label: "x3",
-    type: "multiply",
-    value: 3,
-    description: "Triple the current power.",
-  },
-  {
     label: "-1",
+    shortLabel: "-1",
     type: "subtract",
     value: 1,
     description: "Subtract 1 power.",
   },
   {
-    label: "C+6",
+    label: "Cursed +6",
+    shortLabel: "C+6",
     type: "curse",
     value: 6,
-    description: "Add 6 power, but gain 1 curse.",
+    description: "Add 6 power and 1 curse. Curses increase payout.",
+  },
+  {
+    label: "Edge x2",
+    shortLabel: "Ex2",
+    type: "edgeDouble",
+    value: 2,
+    description: "Double the spell if placed on an outer edge.",
+  },
+  {
+    label: "Corner +7",
+    shortLabel: "Co+7",
+    type: "cornerAdd",
+    value: 7,
+    description: "Add 7 power in a corner. Otherwise add 2.",
+  },
+  {
+    label: "Center +6",
+    shortLabel: "Ce+6",
+    type: "centerAdd",
+    value: 6,
+    description: "Add 6 power in the center. Otherwise add 1.",
+  },
+  {
+    label: "Copy Left",
+    shortLabel: "Copy",
+    type: "copyLeft",
+    value: 0,
+    description: "Copy the base power of the glyph directly to the left.",
+  },
+  {
+    label: "Neighbor +2",
+    shortLabel: "N+2",
+    type: "neighborAdd",
+    value: 2,
+    description: "Add 2 power for each adjacent glyph.",
   },
 ];
 
@@ -168,58 +216,59 @@ function createHand(size = 5): Glyph[] {
 
 function createRound(handSize = 5, ease = 0) {
   const hand = createHand(handSize);
-  const possiblePowers = getPossiblePowers(hand);
-  const contract = createContractFromPossiblePowers(possiblePowers, ease);
+  const solutionBoard = createRandomSolutionBoard(hand);
+  const solutionPower = calculateSpell(solutionBoard).power;
+  const contract = createContractFromSolution(solutionPower, ease);
 
   return { hand, contract };
 }
 
-function getPossiblePowers(hand: Glyph[]) {
-  const results = new Set<number>();
+function createRandomSolutionBoard(hand: Glyph[]) {
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const board: BoardCell[] = Array(BOARD_SIZE).fill(null);
+    const shuffledHand = shuffleArray(hand);
+    const glyphCount = randomInt(2, Math.min(hand.length, 5));
+    const solutionGlyphs = shuffledHand.slice(0, glyphCount);
+    const positions = shuffleArray(
+      Array.from({ length: BOARD_SIZE }, (_, index) => index)
+    ).slice(0, glyphCount);
 
-  function explore(remaining: Glyph[], sequence: Glyph[]) {
-    if (sequence.length > 0) {
-      const { power } = calculatePower(sequence);
-      results.add(power);
-    }
+    solutionGlyphs.forEach((glyph, index) => {
+      board[positions[index]] = glyph;
+    });
 
-    for (let i = 0; i < remaining.length; i++) {
-      const nextGlyph = remaining[i];
-      const nextRemaining = remaining.filter((_, index) => index !== i);
-      explore(nextRemaining, [...sequence, nextGlyph]);
+    const result = calculateSpell(board);
+
+    if (result.power > 0) {
+      return board;
     }
   }
 
-  explore(hand, []);
+  const fallbackBoard: BoardCell[] = Array(BOARD_SIZE).fill(null);
 
-  return Array.from(results)
-    .filter((value) => value > 0)
-    .sort((a, b) => a - b);
+  hand.slice(0, 3).forEach((glyph, index) => {
+    fallbackBoard[index] = glyph;
+  });
+
+  return fallbackBoard;
 }
 
-function createContractFromPossiblePowers(
-  possiblePowers: number[],
-  ease = 0
-): Contract {
-  const safePowers = possiblePowers.length > 0 ? possiblePowers : [5];
-  const powerOptions = safePowers.filter((power) => power >= 1);
+function createContractFromSolution(solutionPower: number, ease = 0): Contract {
+  const safePower = Math.max(1, solutionPower);
   const roll = Math.random();
 
   if (roll < 0.4) {
-    const target = pickRandom(powerOptions);
-
     return {
       type: "exact",
-      target,
-      text: `Create exactly ${target} power.`,
+      target: safePower,
+      text: `Create exactly ${safePower} power.`,
     };
   }
 
   if (roll < 0.75) {
-    const maxPower = Math.max(...powerOptions);
-    const adjustedMax = Math.max(4, maxPower - ease);
-    const lowTarget = Math.max(1, Math.floor(adjustedMax * 0.55));
-    const target = randomInt(lowTarget, adjustedMax);
+    const lowTarget = Math.max(1, Math.floor(safePower * 0.65));
+    const highTarget = Math.max(1, safePower - ease);
+    const target = randomInt(lowTarget, Math.max(lowTarget, highTarget));
 
     return {
       type: "minimum",
@@ -228,10 +277,9 @@ function createContractFromPossiblePowers(
     };
   }
 
-  const target = pickRandom(powerOptions);
   const spread = randomInt(2, 5) + ease;
-  const min = Math.max(1, target - spread);
-  const max = target + spread;
+  const min = Math.max(1, safePower - spread);
+  const max = safePower + spread;
 
   return {
     type: "range",
@@ -242,42 +290,73 @@ function createContractFromPossiblePowers(
 }
 
 function createUpgradeChoices(): Upgrade[] {
-  const shuffled = [...upgradePool].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, 3);
+  return shuffleArray(upgradePool).slice(0, 3);
 }
 
-function pickRandom<T>(items: T[]) {
-  return items[Math.floor(Math.random() * items.length)];
-}
+function calculateSpell(board: BoardCell[]): SpellResult {
+  const baseValues = board.map((glyph, index) => {
+    if (!glyph) return 0;
 
-function randomInt(min: number, max: number) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-function calculatePower(placedGlyphs: Glyph[]) {
-  let power = 0;
-  let curse = 0;
-
-  for (const glyph of placedGlyphs) {
     if (glyph.type === "add") {
-      power += glyph.value;
+      return glyph.value;
     }
 
     if (glyph.type === "subtract") {
-      power -= glyph.value;
-    }
-
-    if (glyph.type === "multiply") {
-      power *= glyph.value;
+      return -glyph.value;
     }
 
     if (glyph.type === "curse") {
-      power += glyph.value;
+      return glyph.value;
+    }
+
+    if (glyph.type === "cornerAdd") {
+      return isCorner(index) ? 7 : 2;
+    }
+
+    if (glyph.type === "centerAdd") {
+      return isCenter(index) ? 6 : 1;
+    }
+
+    if (glyph.type === "neighborAdd") {
+      return (
+        getAdjacentIndexes(index).filter((adjacentIndex) => {
+          return board[adjacentIndex] !== null;
+        }).length * glyph.value
+      );
+    }
+
+    return 0;
+  });
+
+  let basePower = baseValues.reduce((total, value) => total + value, 0);
+  let curse = 0;
+  let multiplier = 1;
+
+  board.forEach((glyph, index) => {
+    if (!glyph) return;
+
+    if (glyph.type === "curse") {
       curse += 1;
     }
-  }
 
-  return { power, curse };
+    if (glyph.type === "edgeDouble" && isEdge(index)) {
+      multiplier *= 2;
+    }
+
+    if (glyph.type === "copyLeft") {
+      const leftIndex = getLeftIndex(index);
+
+      if (leftIndex !== null) {
+        basePower += baseValues[leftIndex];
+      }
+    }
+  });
+
+  return {
+    power: Math.max(0, basePower * multiplier),
+    curse,
+    multiplier,
+  };
 }
 
 function checkContract(contract: Contract, power: number) {
@@ -292,31 +371,94 @@ function checkContract(contract: Contract, power: number) {
   return power >= contract.min && power <= contract.max;
 }
 
+function calculateNextDebt(day: number) {
+  const cycle = Math.floor(day / 3);
+  return 24 + cycle * 8;
+}
+
+function isEdge(index: number) {
+  const row = Math.floor(index / BOARD_WIDTH);
+  const column = index % BOARD_WIDTH;
+
+  return row === 0 || row === 3 || column === 0 || column === 3;
+}
+
+function isCorner(index: number) {
+  return index === 0 || index === 3 || index === 12 || index === 15;
+}
+
+function isCenter(index: number) {
+  return index === 5 || index === 6 || index === 9 || index === 10;
+}
+
+function getLeftIndex(index: number) {
+  const column = index % BOARD_WIDTH;
+
+  if (column === 0) {
+    return null;
+  }
+
+  return index - 1;
+}
+
+function getAdjacentIndexes(index: number) {
+  const row = Math.floor(index / BOARD_WIDTH);
+  const column = index % BOARD_WIDTH;
+  const adjacentIndexes: number[] = [];
+
+  if (row > 0) {
+    adjacentIndexes.push(index - BOARD_WIDTH);
+  }
+
+  if (row < BOARD_WIDTH - 1) {
+    adjacentIndexes.push(index + BOARD_WIDTH);
+  }
+
+  if (column > 0) {
+    adjacentIndexes.push(index - 1);
+  }
+
+  if (column < BOARD_WIDTH - 1) {
+    adjacentIndexes.push(index + 1);
+  }
+
+  return adjacentIndexes;
+}
+
+function shuffleArray<T>(items: T[]) {
+  return [...items].sort(() => Math.random() - 0.5);
+}
+
+function randomInt(min: number, max: number) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
 function App() {
   const [day, setDay] = useState(1);
   const [gold, setGold] = useState(0);
-  const [debt, setDebt] = useState(30);
+  const [debt, setDebt] = useState(STARTING_DEBT);
   const [upgrades, setUpgrades] = useState<PlayerUpgrades>(startingUpgrades);
 
   const [startingRound] = useState(() => createRound(startingUpgrades.handSize));
 
   const [contract, setContract] = useState<Contract>(startingRound.contract);
   const [hand, setHand] = useState<Glyph[]>(startingRound.hand);
-  const [board, setBoard] = useState<BoardCell[]>(() => Array(16).fill(null));
+  const [board, setBoard] = useState<BoardCell[]>(() =>
+    Array(BOARD_SIZE).fill(null)
+  );
   const [selectedGlyphId, setSelectedGlyphId] = useState<string | null>(null);
-  const [message, setMessage] = useState("Choose a glyph, place it, then cast.");
+  const [draggedGlyphId, setDraggedGlyphId] = useState<string | null>(null);
+  const [message, setMessage] = useState(
+    "Choose a glyph, place it, then cast."
+  );
   const [isRunOver, setIsRunOver] = useState(false);
   const [hasCast, setHasCast] = useState(false);
   const [showUpgradeChoices, setShowUpgradeChoices] = useState(false);
   const [upgradeChoices, setUpgradeChoices] = useState<Upgrade[]>([]);
 
-  const placedGlyphs = useMemo(() => {
-    return board.filter((cell): cell is Glyph => cell !== null);
+  const { power, curse, multiplier } = useMemo(() => {
+    return calculateSpell(board);
   }, [board]);
-
-  const { power, curse } = useMemo(() => {
-    return calculatePower(placedGlyphs);
-  }, [placedGlyphs]);
 
   const selectedGlyph = hand.find((glyph) => glyph.id === selectedGlyphId);
 
@@ -333,29 +475,124 @@ function App() {
     setDay(nextDay);
     setContract(nextRound.contract);
     setHand(nextRound.hand);
-    setBoard(Array(16).fill(null));
+    setBoard(Array(BOARD_SIZE).fill(null));
     setSelectedGlyphId(null);
+    setDraggedGlyphId(null);
     setHasCast(false);
     setMessage(nextMessage);
   }
 
-  function placeGlyph(cellIndex: number) {
+  function placeGlyph(cellIndex: number, glyphId?: string) {
     if (hasCast) {
       setMessage("The spell has already been cast. Move to the next contract.");
       return;
     }
 
-    if (!selectedGlyph || board[cellIndex]) return;
+    const glyphToPlace =
+      hand.find((glyph) => glyph.id === glyphId) || selectedGlyph;
+
+    if (!glyphToPlace || board[cellIndex]) return;
 
     const nextBoard = [...board];
-    nextBoard[cellIndex] = selectedGlyph;
+    nextBoard[cellIndex] = glyphToPlace;
 
     setBoard(nextBoard);
     setHand((current) =>
-      current.filter((glyph) => glyph.id !== selectedGlyph.id)
+      current.filter((glyph) => glyph.id !== glyphToPlace.id)
     );
     setSelectedGlyphId(null);
-    setMessage(`${selectedGlyph.label} placed on the ritual board.`);
+    setDraggedGlyphId(null);
+    setPlacementMessage(glyphToPlace, cellIndex);
+  }
+
+  function removeGlyphFromBoard(cellIndex: number) {
+    if (hasCast) {
+      setMessage("The spell has already been cast. Move to the next contract.");
+      return;
+    }
+
+    const glyph = board[cellIndex];
+
+    if (!glyph) return;
+
+    const nextBoard = [...board];
+    nextBoard[cellIndex] = null;
+
+    setBoard(nextBoard);
+    setHand((current) => [...current, glyph]);
+    setSelectedGlyphId(null);
+    setDraggedGlyphId(null);
+    setMessage(`${glyph.label} returned to your hand.`);
+  }
+
+  function clearBoard() {
+    if (hasCast) {
+      setMessage("The spell has already been cast. Move to the next contract.");
+      return;
+    }
+
+    const placedGlyphs = board.filter((cell): cell is Glyph => cell !== null);
+
+    if (placedGlyphs.length === 0) {
+      setMessage("The ritual board is already empty.");
+      return;
+    }
+
+    setHand((current) => [...current, ...placedGlyphs]);
+    setBoard(Array(BOARD_SIZE).fill(null));
+    setSelectedGlyphId(null);
+    setDraggedGlyphId(null);
+    setMessage("The ritual board has been cleared.");
+  }
+
+  function setPlacementMessage(glyph: Glyph, cellIndex: number) {
+    if (glyph.type === "edgeDouble") {
+      setMessage(
+        isEdge(cellIndex)
+          ? "Edge x2 placed on an edge. The spell will double."
+          : "Edge x2 placed away from the edge. It has no effect here."
+      );
+      return;
+    }
+
+    if (glyph.type === "cornerAdd") {
+      setMessage(
+        isCorner(cellIndex)
+          ? "Corner +7 placed in a corner. Full power gained."
+          : "Corner +7 placed outside a corner. It only adds 2 here."
+      );
+      return;
+    }
+
+    if (glyph.type === "centerAdd") {
+      setMessage(
+        isCenter(cellIndex)
+          ? "Center +6 placed in the center. Full power gained."
+          : "Center +6 placed outside the center. It only adds 1 here."
+      );
+      return;
+    }
+
+    if (glyph.type === "copyLeft") {
+      setMessage(
+        getLeftIndex(cellIndex) !== null
+          ? "Copy Left placed. It will copy the base power to its left."
+          : "Copy Left placed on the far left. There is nothing to copy."
+      );
+      return;
+    }
+
+    if (glyph.type === "neighborAdd") {
+      setMessage("Neighbor +2 placed. It grows stronger beside other glyphs.");
+      return;
+    }
+
+    if (glyph.type === "curse") {
+      setMessage("Cursed +6 placed. More power now. More profit if it works.");
+      return;
+    }
+
+    setMessage(`${glyph.label} placed on the ritual board.`);
   }
 
   function castSpell() {
@@ -363,6 +600,8 @@ function App() {
       setMessage("This contract has already been resolved.");
       return;
     }
+
+    const placedGlyphs = board.filter((cell) => cell !== null);
 
     if (placedGlyphs.length === 0) {
       setMessage("You need to place at least one glyph first.");
@@ -373,13 +612,17 @@ function App() {
     setHasCast(true);
 
     if (success) {
+      const baseReward = 12;
+      const curseBonus = curse * (2 + upgrades.curseRewardBonus);
       const reward = Math.max(
         5,
-        10 + upgrades.rewardBonus + curse * (2 + upgrades.curseRewardBonus)
+        baseReward + upgrades.rewardBonus + curseBonus
       );
 
       setGold((current) => current + reward);
-      setMessage(`Contract fulfilled. You earned ${reward} gold.`);
+      setMessage(
+        `Contract fulfilled. Gold: ${baseReward} base + ${upgrades.rewardBonus} upgrade + ${curseBonus} curse = ${reward}.`
+      );
       return;
     }
 
@@ -409,7 +652,7 @@ function App() {
       }
 
       const remainingGold = gold - debt;
-      const newDebt = 30 + day * 4;
+      const newDebt = calculateNextDebt(day);
 
       setGold(remainingGold);
       setDebt(newDebt);
@@ -419,7 +662,11 @@ function App() {
       return;
     }
 
-    startNewContract(day + 1, upgrades, "A new contract slides across the counter.");
+    startNewContract(
+      day + 1,
+      upgrades,
+      "A new contract slides across the counter."
+    );
   }
 
   function chooseUpgrade(upgrade: Upgrade) {
@@ -440,12 +687,13 @@ function App() {
 
     setDay(1);
     setGold(0);
-    setDebt(30);
+    setDebt(STARTING_DEBT);
     setUpgrades(resetUpgrades);
     setContract(nextRound.contract);
     setHand(nextRound.hand);
-    setBoard(Array(16).fill(null));
+    setBoard(Array(BOARD_SIZE).fill(null));
     setSelectedGlyphId(null);
+    setDraggedGlyphId(null);
     setMessage("Choose a glyph, place it, then cast.");
     setIsRunOver(false);
     setHasCast(false);
@@ -494,6 +742,7 @@ function App() {
           <p>
             Current spell: <strong>{power}</strong> power
             {curse > 0 ? `, ${curse} curse` : ""}
+            {multiplier > 1 ? `, x${multiplier} multiplier` : ""}
           </p>
         </section>
 
@@ -502,9 +751,28 @@ function App() {
             <button
               key={index}
               className={`board-cell ${cell ? "filled" : ""}`}
-              onClick={() => placeGlyph(index)}
+              onClick={() => {
+                if (cell) {
+                  removeGlyphFromBoard(index);
+                  return;
+                }
+
+                placeGlyph(index);
+              }}
+              onDragOver={(event) => {
+                event.preventDefault();
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                const glyphId =
+                  event.dataTransfer.getData("text/plain") || draggedGlyphId;
+
+                if (glyphId) {
+                  placeGlyph(index, glyphId);
+                }
+              }}
             >
-              {cell ? cell.label : ""}
+              {cell ? cell.shortLabel : ""}
             </button>
           ))}
         </section>
@@ -516,6 +784,17 @@ function App() {
               className={`glyph-card ${
                 selectedGlyphId === glyph.id ? "selected" : ""
               }`}
+              draggable={!hasCast}
+              onDragStart={(event) => {
+                if (hasCast) return;
+
+                setDraggedGlyphId(glyph.id);
+                event.dataTransfer.setData("text/plain", glyph.id);
+                event.dataTransfer.effectAllowed = "move";
+              }}
+              onDragEnd={() => {
+                setDraggedGlyphId(null);
+              }}
               onClick={() => {
                 if (hasCast) {
                   setMessage(
@@ -553,6 +832,16 @@ function App() {
             disabled={!hasCast || showUpgradeChoices}
           >
             Next
+          </button>
+        </div>
+
+        <div className="utility-row">
+          <button
+            className="secondary-button"
+            onClick={clearBoard}
+            disabled={hasCast || showUpgradeChoices}
+          >
+            Clear Board
           </button>
         </div>
 
