@@ -529,6 +529,7 @@ function App() {
 
     const nextBoard = [...board];
     nextBoard[previewCellIndex] = selectedGlyph;
+
     return nextBoard;
   }, [board, previewCellIndex, selectedGlyph]);
 
@@ -538,6 +539,7 @@ function App() {
 
   const previewResult = useMemo(() => {
     if (!previewBoard) return null;
+
     return calculateSpell(previewBoard);
   }, [previewBoard]);
 
@@ -610,8 +612,18 @@ function App() {
   }
 
   function previewOrPlaceGlyph(cellIndex: number) {
-    if (!selectedGlyph || board[cellIndex]) {
-      placeGlyph(cellIndex);
+    if (hasCast) {
+      setMessage("The spell has already been cast. Move to the next contract.");
+      return;
+    }
+
+    if (board[cellIndex]) {
+      removeGlyphFromBoard(cellIndex);
+      return;
+    }
+
+    if (!selectedGlyph) {
+      setMessage("Choose a glyph first.");
       return;
     }
 
@@ -619,13 +631,15 @@ function App() {
       const nextBoard = [...board];
       nextBoard[cellIndex] = selectedGlyph;
       const preview = calculateSpell(nextBoard);
+
       setPreviewCellIndex(cellIndex);
       setMessage(
-        `Preview: placing ${selectedGlyph.label} here creates ${preview.power} power. ${getContractPreviewText(
+        `Preview: ${selectedGlyph.label} here creates ${preview.power} power. ${getContractPreviewText(
           contract,
           preview.power
-        )}`
+        )} Tap this cell again to place it.`
       );
+
       return;
     }
 
@@ -909,22 +923,7 @@ function App() {
               className={`board-cell ${cell ? "filled" : ""} ${
                 previewCellIndex === index ? "previewed" : ""
               }`}
-              onClick={() => {
-                if (cell) {
-                  removeGlyphFromBoard(index);
-                  return;
-                }
-
-                previewOrPlaceGlyph(index);
-              }}
-              onMouseEnter={() => {
-                if (!selectedGlyph || board[index] || hasCast) return;
-                setPreviewCellIndex(index);
-              }}
-              onMouseLeave={() => {
-                if (!selectedGlyph || hasCast) return;
-                setPreviewCellIndex(null);
-              }}
+              onClick={() => previewOrPlaceGlyph(index)}
               onDragOver={(event) => {
                 event.preventDefault();
               }}
