@@ -215,11 +215,6 @@ function createGlyphFromBase(base: Omit<Glyph, "id">): Glyph {
   };
 }
 
-function createRandomGlyph(): Glyph {
-  const base = glyphPool[Math.floor(Math.random() * glyphPool.length)];
-  return createGlyphFromBase(base);
-}
-
 function createHand(size = 5): Glyph[] {
   const basics = glyphPool.filter((glyph) => !glyph.isSpecial);
   const specials = shuffleArray(glyphPool.filter((glyph) => glyph.isSpecial));
