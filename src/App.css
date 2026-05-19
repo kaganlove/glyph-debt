@@ -24,12 +24,21 @@ button {
   font: inherit;
 }
 
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+button:not(:disabled) {
+  cursor: pointer;
+}
+
 .app-shell {
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 18px;
+  padding: 14px;
 }
 
 .phone-frame {
@@ -41,7 +50,7 @@ button {
     linear-gradient(180deg, rgba(45, 31, 49, 0.96), rgba(24, 18, 29, 0.98)),
     #1a131f;
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
-  padding: 18px;
+  padding: 14px;
 }
 
 .center-content {
@@ -54,8 +63,8 @@ button {
 .top-bar {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-  margin-bottom: 14px;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
 .top-bar div {
@@ -68,7 +77,7 @@ button {
 .stat-label,
 .eyebrow {
   display: block;
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #caa878;
@@ -76,23 +85,23 @@ button {
 }
 
 .top-bar strong {
-  font-size: 1.2rem;
+  font-size: 1.15rem;
 }
 
 .contract-card {
   border: 1px solid rgba(202, 168, 120, 0.32);
-  border-radius: 22px;
+  border-radius: 20px;
   background:
     linear-gradient(135deg, rgba(112, 71, 37, 0.22), rgba(255, 255, 255, 0.04)),
     rgba(255, 255, 255, 0.04);
-  padding: 16px;
-  margin-bottom: 14px;
+  padding: 14px;
+  margin-bottom: 10px;
 }
 
 .contract-card h1 {
-  font-size: 1.35rem;
+  font-size: 1.22rem;
   line-height: 1.15;
-  margin: 0 0 10px;
+  margin: 0 0 8px;
 }
 
 .contract-card p {
@@ -100,23 +109,67 @@ button {
   color: #dfceb2;
 }
 
+.compact-cycle-card {
+  border: 1px solid rgba(246, 234, 210, 0.12);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.045);
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  display: grid;
+  gap: 5px;
+}
+
+.cycle-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  font-size: 0.82rem;
+}
+
+.cycle-row span {
+  color: #caa878;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-size: 0.66rem;
+}
+
+.cycle-row strong {
+  color: #f6ead2;
+  font-size: 0.84rem;
+  text-align: right;
+}
+
+.cycle-note {
+  border-top: 1px solid rgba(246, 234, 210, 0.1);
+  padding-top: 6px;
+  color: #dcc9aa;
+  font-size: 0.76rem;
+  line-height: 1.2;
+  text-align: center;
+}
+
 .board {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 8px;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .board-cell {
   aspect-ratio: 1;
   border: 1px solid rgba(246, 234, 210, 0.18);
-  border-radius: 16px;
+  border-radius: 15px;
   background:
     radial-gradient(circle, rgba(202, 168, 120, 0.16), transparent 62%),
     rgba(255, 255, 255, 0.04);
   color: #f6ead2;
-  font-size: 1.2rem;
+  font-size: 0.96rem;
+  line-height: 1.05;
   font-weight: 800;
+  overflow: hidden;
+  word-break: normal;
+  white-space: normal;
 }
 
 .board-cell.filled {
@@ -129,29 +182,31 @@ button {
 .hand {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
+  gap: 7px;
 }
 
 .glyph-card {
-  min-height: 76px;
+  min-height: 58px;
   border: 1px solid rgba(246, 234, 210, 0.14);
-  border-radius: 16px;
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.055);
   color: #f6ead2;
   text-align: left;
-  padding: 10px;
+  padding: 8px 10px;
+  touch-action: manipulation;
 }
 
 .glyph-card strong {
   display: block;
-  font-size: 1.25rem;
-  margin-bottom: 4px;
+  font-size: 1rem;
+  margin-bottom: 2px;
+  line-height: 1.1;
 }
 
 .glyph-card span {
   display: block;
-  font-size: 0.76rem;
-  line-height: 1.25;
+  font-size: 0.68rem;
+  line-height: 1.15;
   color: #d8c7aa;
 }
 
@@ -162,10 +217,12 @@ button {
 }
 
 .message {
-  min-height: 42px;
-  margin: 14px 0;
+  min-height: 34px;
+  margin: 10px 0;
   color: #dcc9aa;
-  line-height: 1.35;
+  line-height: 1.25;
+  text-align: center;
+  font-size: 0.95rem;
 }
 
 .action-row {
@@ -174,11 +231,17 @@ button {
   gap: 8px;
 }
 
+.utility-row {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
 .primary-button,
 .secondary-button {
   border: 0;
   border-radius: 14px;
-  padding: 12px 10px;
+  padding: 11px 10px;
   font-weight: 800;
 }
 
@@ -193,6 +256,59 @@ button {
   border: 1px solid rgba(246, 234, 210, 0.12);
 }
 
+.upgrade-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(9, 7, 11, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  z-index: 20;
+}
+
+.upgrade-panel {
+  width: min(100%, 390px);
+  border: 1px solid rgba(202, 168, 120, 0.38);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at top, rgba(202, 168, 120, 0.18), transparent 60%),
+    #201723;
+  padding: 18px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.62);
+}
+
+.upgrade-panel h2 {
+  margin: 0 0 14px;
+  font-size: 1.45rem;
+}
+
+.upgrade-list {
+  display: grid;
+  gap: 10px;
+}
+
+.upgrade-card {
+  border: 1px solid rgba(246, 234, 210, 0.16);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #f6ead2;
+  text-align: left;
+  padding: 12px;
+}
+
+.upgrade-card strong {
+  display: block;
+  margin-bottom: 6px;
+  color: #f2cb78;
+}
+
+.upgrade-card span {
+  display: block;
+  color: #dcc9aa;
+  line-height: 1.3;
+}
+
 @media (max-width: 440px) {
   .app-shell {
     padding: 0;
@@ -204,60 +320,4 @@ button {
     border-radius: 0;
     border: 0;
   }
-}
-
-button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-button:not(:disabled) {
-  cursor: pointer;
-}
-
-.utility-row {
-  margin-top: 8px;
-  display: grid;
-  grid-template-columns: 1fr;
-}
-
-.board-cell {
-  font-size: 1rem;
-  line-height: 1.05;
-  overflow: hidden;
-  word-break: normal;
-  white-space: normal;
-}
-
-.glyph-card {
-  touch-action: manipulation;
-}
-
-.board-cell.filled {
-  font-size: 1.05rem;
-}
-
-.cycle-card {
-  border: 1px solid rgba(246, 234, 210, 0.12);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.045);
-  padding: 12px;
-  margin-bottom: 14px;
-  display: grid;
-  gap: 8px;
-}
-
-.cycle-card strong {
-  display: block;
-  color: #f6ead2;
-  font-size: 0.92rem;
-  line-height: 1.25;
-}
-
-.reward-preview {
-  border-top: 1px solid rgba(246, 234, 210, 0.1);
-  padding-top: 8px;
-  color: #dcc9aa;
-  font-size: 0.86rem;
-  line-height: 1.3;
 }

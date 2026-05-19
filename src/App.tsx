@@ -491,15 +491,14 @@ function App() {
     0,
     debt - projectedGoldAfterSuccess
   );
+
   const debtStatus =
-    shortfall === 0
-      ? "Safe for the next payment."
-      : `Short by ${shortfall} gold.`;
+    shortfall === 0 ? "Safe" : `Short by ${shortfall}`;
 
   const projectedDebtStatus =
     projectedShortfallAfterSuccess === 0
-      ? "A successful contract would make you safe."
-      : `Even after success, you would still need ${projectedShortfallAfterSuccess} gold.`;
+      ? "Success makes you safe."
+      : `After success, still short by ${projectedShortfallAfterSuccess}.`;
 
   const selectedGlyph = hand.find((glyph) => glyph.id === selectedGlyphId);
 
@@ -784,32 +783,27 @@ function App() {
           </p>
         </section>
 
-        <section className="cycle-card">
-          <div>
-            <span className="stat-label">Debt Cycle</span>
+        <section className="cycle-card compact-cycle-card">
+          <div className="cycle-row">
+            <span>Debt</span>
             <strong>
               {contractsUntilDebtDue === 1
                 ? "Due after this contract"
-                : `Due in ${contractsUntilDebtDue} contracts`}
+                : `Due in ${contractsUntilDebtDue}`}
             </strong>
           </div>
 
-          <div>
-            <span className="stat-label">Payment Status</span>
+          <div className="cycle-row">
+            <span>Status</span>
             <strong>{debtStatus}</strong>
           </div>
 
-          <div>
-            <span className="stat-label">If This Contract Succeeds</span>
-            <strong>{projectedDebtStatus}</strong>
+          <div className="cycle-row">
+            <span>Success</span>
+            <strong>+{projectedReward.totalReward} gold</strong>
           </div>
 
-          <div className="reward-preview">
-            Reward if successful: {projectedReward.baseReward} base +{" "}
-            {projectedReward.upgradeBonus} upgrade +{" "}
-            {projectedReward.curseBonus} curse ={" "}
-            <strong>{projectedReward.totalReward}</strong> gold
-          </div>
+          <div className="cycle-note">{projectedDebtStatus}</div>
         </section>
 
         <section className="board">
